@@ -137,3 +137,5 @@ lat_mask <- 0<=lat_new & lat_new<=10
 ```{r}
 image(lon_new[lon_mask], lat_new[lat_mask], precip_slice_new[lon_mask, lat_mask], col=rev(brewer.pal(10,"RdBu")))
 ```
+
+x = 2
