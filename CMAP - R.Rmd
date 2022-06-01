@@ -8,7 +8,7 @@ date: '2022-05-30'
 library(ncdf4)
 
 # set path and filename
-ncpath <- "/Users/hwingren/Downloads/Blackwell/"
+ncpath <- "/Users/hwingren/Downloads/Blackwell/Blackwell_Scholars_2022/"
 ncname <- "precip.mon.mean.nc"  
 ncfname <- paste(ncpath, ncname, sep="")
 dname <- "precip"
@@ -138,4 +138,92 @@ lat_mask <- 0<=lat_new & lat_new<=10
 image(lon_new[lon_mask], lat_new[lat_mask], precip_slice_new[lon_mask, lat_mask], col=rev(brewer.pal(10,"RdBu")))
 ```
 
-x = 2
+# create dataframe -- reshape data
+```{r}
+# matrix (nlon*nlat rows by 2 cols) of lons and lats
+lonlat <- as.matrix(expand.grid(lon_new,lat_new))
+dim(lonlat)
+```
+
+# vector of `precip` values
+```{r}
+precip_vec <- as.vector(precip_slice_new)
+length(precip_vec)
+```
+
+# create dataframe and add names
+```{r}
+precip_df01 <- data.frame(cbind(lonlat,precip_vec))
+names(precip_df01) <- c("lon","lat",paste(dname,as.character(m), sep="_"))
+head(na.omit(precip_df01), 10)
+```
+# set path and filename
+```{r}
+csvpath <- "/Users/hwingren/Downloads/Blackwell/Blackwell_Scholars_2022/"
+csvname <- "CMAP_precip_1.csv"
+csvfile <- paste(csvpath, csvname, sep="")
+write.table(na.omit(precip_df01),csvfile, row.names=FALSE, sep=",")
+```
+
+# narrow down csv
+```{r}
+lon_mask <- -75<=precip_df01$lon & precip_df01$lon<=-60
+lat_mask <- 0<=precip_df01$lat & precip_df01$lat<=10
+precip_df01[lon_mask & lat_mask, ]
+```
+
+# reshape the array into vector
+```{r}
+precip_vec_long <- as.vector(precip_array)
+length(precip_vec_long)
+```
+
+# reshape the vector into a matrix
+```{r}
+precip_mat <- matrix(precip_vec_long, nrow=nlon*nlat, ncol=nt)
+dim(precip_mat)
+
+head(na.omit(precip_mat))
+```
+
+# create a dataframe
+```{r}
+lonlat <- as.matrix(expand.grid(lon_new,lat_new))
+precip_df02 <- data.frame(cbind(lonlat,precip_mat))
+names(precip_df02) <- c("lon","lat","precipJan","precipFeb","precipMar","precipApr","precipMay","precipJun",
+  "precipJul","precipAug","precipSep","precipOct","precipNov","precipDec")
+# options(width=96)
+head(na.omit(precip_df02, 20))
+```
+
+# get the annual mean and MTWA and MTCO
+```{r}
+precip_df02$mtwa <- apply(precip_df02[3:14],1,max) # mtwa
+precip_df02$mtco <- apply(precip_df02[3:14],1,min) # mtco
+precip_df02$mat <- apply(precip_df02[3:14],1,mean) # annual (i.e. row) means
+head(na.omit(precip_df02))
+
+dim(na.omit(precip_df02))
+```
+
+# write out the dataframe as a .csv file
+```{r}
+csvpath <- "/Users/hwingren/Downloads/Blackwell/Blackwell_Scholars_2022/"
+csvname <- "CMAP_precip_2.csv"
+csvfile <- paste(csvpath, csvname, sep="")
+write.table(na.omit(precip_df02),csvfile, row.names=FALSE, sep=",")
+```
+
+# narrow down csv
+```{r}
+lon_mask <- -75<=precip_df02$lon & precip_df02$lon<=-60
+lat_mask <- 0<=precip_df02$lat & precip_df02$lat<=10
+precip_df02[lon_mask & lat_mask, ]
+```
+
+# create a dataframe without missing values
+```{r}
+precip_df03 <- na.omit(precip_df02)
+head(precip_df03)
+```
+
