@@ -91,24 +91,26 @@ precip_array[precip_array==fillvalue$value] <- NA
 length(na.omit(as.vector(precip_array[,,1])))
 ```
 
-# get a single slice or layer (January)
+# get 12 months slice of layer (Jan-Dec 1982)
 ```{r}
-m <- 1
-precip_slice <- precip_array[,,m]
+#m <- 1
+precip_slice <- precip_array[,,c(37:48, 241:252)]
 dim(precip_slice)
 ```
 
 # quick map
 ```{r}
-image(lon,rev(lat),precip_slice[, ncol(precip_slice):1], col=rev(brewer.pal(10,"RdBu")))
+for(m in 1:24){
+image(lon,rev(lat),precip_slice[, ncol(precip_slice):1,m], col=rev(heat.colors(16)), breaks=0:16)}
 ```
 
 # levelplot of the slice
 ```{r}
 grid <- expand.grid(lon=lon, lat=lat)
-cutpts <- seq(0, 45, length.out=11)
-levelplot(precip_slice ~ lon * lat, data=grid, at=cutpts, cuts=11, pretty=T, 
-  col.regions=(rev(brewer.pal(10,"RdBu"))))
+cutpts <- seq(0, 40, length.out=11)
+m<-1
+levelplot(precip_slice[,,m] ~ lon * lat, data=grid, at=cutpts, cuts=11, pretty=T, 
+  col.regions=(rev(heat.colors(16))))
 ```
             
 # create new lon and lat vectors
@@ -119,111 +121,65 @@ lat_new <- rev(lat)
 
 # create new precipitation matrix
 ```{r}
-precip_slice_new <- precip_slice[c(73:144, 1:72), ncol(precip_slice):1]
+precip_slice_new <- precip_slice[c(73:144, 1:72), ncol(precip_slice):1,]
 ```
 
 # plot whole globe
 ```{r}
-image(lon_new, lat_new, precip_slice_new, col=rev(brewer.pal(10,"RdBu")))
+m<-1 #January
+image(lon_new, lat_new, precip_slice_new[,,m], col=rev(heat.colors(16)), breaks=0:16)
+#Compare with previous plot
+image(lon,rev(lat),precip_slice[, ncol(precip_slice):1,m], col=rev(heat.colors(16)), breaks=0:16)
 ```
 
 # create boolean masks corresponding to region of interest
 ```{r}
 lon_mask <- -75<=lon_new & lon_new <=(-60) # need parentheses here because <- is the assignment operator
-lat_mask <- 0<=lat_new & lat_new<=10
+lat_mask <- 0<=lat_new & lat_new<=12
 ```
 
 # plot region of interest
 ```{r}
-image(lon_new[lon_mask], lat_new[lat_mask], precip_slice_new[lon_mask, lat_mask], col=rev(brewer.pal(10,"RdBu")))
+m<-1
+for(m in 1:24){
+image(lon_new[lon_mask], lat_new[lat_mask], precip_slice_new[lon_mask, lat_mask,m], col=rev(heat.colors(16)), breaks=0:16)} # I took off the rev function here
+#
+m<-24
+grid <- expand.grid(lon=lon_new[lon_mask], lat=lat_new[lat_mask])
+grid$z<-as.vector(precip_slice_new[lon_mask, lat_mask,m])
+cutpts <- seq(0, 16, length.out=11) #watch out for the limits here
+levelplot(z ~ lon * lat, data=grid, at=cutpts, cuts=11, pretty=T, 
+  col.regions=(rev(heat.colors(16))))
 ```
 
 # create dataframe -- reshape data
 ```{r}
 # matrix (nlon*nlat rows by 2 cols) of lons and lats
-lonlat <- as.matrix(expand.grid(lon_new,lat_new))
+lonlat <- as.matrix(expand.grid(lon_new[lon_mask],lat_new[lat_mask]))
 dim(lonlat)
 ```
 
 # vector of `precip` values
 ```{r}
-precip_vec <- as.vector(precip_slice_new)
-length(precip_vec)
+prec_mat<-lonlat
+for (m in 1:24) {
+precip_vec <- as.vector(as.vector(precip_slice_new[lon_mask, lat_mask,m]))
+prec_mat<-cbind(prec_mat,precip_vec)
+}
+colnames(prec_mat) <- c("lon","lat","Jan_1982","Feb_1982","Mar_1982","Apr_1982","May_1982","Jun_1982",
+  "Jul_1982","Aug_1982","Sep_1982","Oct_1982","Nov_1982","Dec_1982","Jan_1999","Feb_1999","Mar_1999","Apr_1999","May_1999","Jun_1999",
+  "Jul_1999","Aug_1999","Sep_1999","Oct_1999","Nov_1999","Dec_1999")
 ```
 
-# create dataframe and add names
 ```{r}
-precip_df01 <- data.frame(cbind(lonlat,precip_vec))
-names(precip_df01) <- c("lon","lat",paste(dname,as.character(m), sep="_"))
-head(na.omit(precip_df01), 10)
+mat_stat<-apply(prec_mat[,3:26],2,summary)
+mat_stat
 ```
-# set path and filename
+
+# calculating statistics for full year
 ```{r}
-csvpath <- "/Users/hwingren/Downloads/Blackwell/Blackwell_Scholars_2022/"
-csvname <- "CMAP_precip_1.csv"
-csvfile <- paste(csvpath, csvname, sep="")
-write.table(na.omit(precip_df01),csvfile, row.names=FALSE, sep=",")
+summary(as.vector(prec_mat[, 3:14]))
+summary(as.vector(prec_mat[, 15:26]))
+sd(as.vector(prec_mat[, 3:14]))
+sd(as.vector(prec_mat[, 15:26]))
 ```
-
-# narrow down csv
-```{r}
-lon_mask <- -75<=precip_df01$lon & precip_df01$lon<=-60
-lat_mask <- 0<=precip_df01$lat & precip_df01$lat<=10
-precip_df01[lon_mask & lat_mask, ]
-```
-
-# reshape the array into vector
-```{r}
-precip_vec_long <- as.vector(precip_array)
-length(precip_vec_long)
-```
-
-# reshape the vector into a matrix
-```{r}
-precip_mat <- matrix(precip_vec_long, nrow=nlon*nlat, ncol=nt)
-dim(precip_mat)
-
-head(na.omit(precip_mat))
-```
-
-# create a dataframe
-```{r}
-lonlat <- as.matrix(expand.grid(lon_new,lat_new))
-precip_df02 <- data.frame(cbind(lonlat,precip_mat))
-names(precip_df02) <- c("lon","lat","precipJan","precipFeb","precipMar","precipApr","precipMay","precipJun",
-  "precipJul","precipAug","precipSep","precipOct","precipNov","precipDec")
-# options(width=96)
-head(na.omit(precip_df02, 20))
-```
-
-# get the annual mean and MTWA and MTCO
-```{r}
-precip_df02$mtwa <- apply(precip_df02[3:14],1,max) # mtwa
-precip_df02$mtco <- apply(precip_df02[3:14],1,min) # mtco
-precip_df02$mat <- apply(precip_df02[3:14],1,mean) # annual (i.e. row) means
-head(na.omit(precip_df02))
-
-dim(na.omit(precip_df02))
-```
-
-# write out the dataframe as a .csv file
-```{r}
-csvpath <- "/Users/hwingren/Downloads/Blackwell/Blackwell_Scholars_2022/"
-csvname <- "CMAP_precip_2.csv"
-csvfile <- paste(csvpath, csvname, sep="")
-write.table(na.omit(precip_df02),csvfile, row.names=FALSE, sep=",")
-```
-
-# narrow down csv
-```{r}
-lon_mask <- -75<=precip_df02$lon & precip_df02$lon<=-60
-lat_mask <- 0<=precip_df02$lat & precip_df02$lat<=10
-precip_df02[lon_mask & lat_mask, ]
-```
-
-# create a dataframe without missing values
-```{r}
-precip_df03 <- na.omit(precip_df02)
-head(precip_df03)
-```
-
