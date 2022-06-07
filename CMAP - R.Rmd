@@ -1,6 +1,8 @@
 ---
 title: "CPC Merged Analysis of Precipitation (CMAP)"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 date: '2022-05-30'
 ---
 
@@ -91,7 +93,7 @@ precip_array[precip_array==fillvalue$value] <- NA
 length(na.omit(as.vector(precip_array[,,1])))
 ```
 
-# get 12 months slice of layer (Jan-Dec 1982)
+# get 12 months slice of layer (Jan-Dec 1982 and Jan-Dec 1999)
 ```{r}
 #m <- 1
 precip_slice <- precip_array[,,c(37:48, 241:252)]
@@ -182,4 +184,12 @@ summary(as.vector(prec_mat[, 3:14]))
 summary(as.vector(prec_mat[, 15:26]))
 sd(as.vector(prec_mat[, 3:14]))
 sd(as.vector(prec_mat[, 15:26]))
+```
+
+# calculate a variogram
+```{r}
+for(m in 3:26) {
+    geo_precip = as.geodata(prec_mat, coords.col = 1:2, data.col = m)
+    plot(variog(geo_precip), , type='l')
+}
 ```
