@@ -144,12 +144,12 @@ lat_mask <- 0<=lat_new & lat_new<=12
 ```{r}
 m<-1
 for(m in 1:12){
-image(lon_new[lon_mask], lat_new[lat_mask], precip_slice_new[lon_mask, lat_mask,m], col=rev(brewer.pal(10,"RdBu")))}
+image(lon_new[lon_mask], lat_new[lat_mask], precip_slice_new[lon_mask, lat_mask,m], col=brewer.pal(10,"RdBu"))} # I took off the rev function here
 #
 m<-6
 grid <- expand.grid(lon=lon_new[lon_mask], lat=lat_new[lat_mask])
 grid$z<-as.vector(precip_slice_new[lon_mask, lat_mask,m])
-cutpts <- seq(0, 20, length.out=11)
+cutpts <- seq(0, 15, length.out=11) #watch out for the limits here
 levelplot(z ~ lon * lat, data=grid, at=cutpts, cuts=11, pretty=T, 
   col.regions=(brewer.pal(10,"RdBu")))
 ```
