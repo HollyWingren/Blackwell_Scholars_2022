@@ -238,12 +238,11 @@ library(terra)
 
 #new block
 ```{r}
-prec.ras = raster(prec_mat[,c(1:2,3)])
-obs.discrete = discretizeRaster(prec.ras, cellsize=480, psf = "gau", sigma = 2, value="obs")
-deconv_precip = deconvPointVgm(obs.discrete, model = "Sph", maxIter = 100, fig=TRUE, ngroup = 24, longlat = TRUE)
+prec_ras = raster(apply(matrix(prec_mat[,18], nrow=5, ncol=6, byrow=TRUE), 2, rev), xmn=-73.75, xmx=-61.25, ymn=1.25, ymx=11.25)
+plot(prec_ras)
 
-prec.ras = raster(prec_mat[,c(1:2,10)])
-obs.discrete = discretizeRaster(prec.ras, cellsize=480, psf = "gau", sigma=2)
+#prec.ras = raster(prec_mat[,c(1:2,3)])
+obs.discrete = discretizeRaster(prec_ras, cellsize=480, psf = "gau", sigma = 2)
 deconv_precip = deconvPointVgm(obs.discrete, model = "Sph", maxIter = 100, fig=TRUE, ngroup = 24, longlat = TRUE)
 ```
 
