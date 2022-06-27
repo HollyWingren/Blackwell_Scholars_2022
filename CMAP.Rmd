@@ -195,10 +195,12 @@ sd(as.vector(prec_mat[, 15:26]))
 # calculate an empirical semi-variogram
 ```{r}
 library(geoR)
+geo_precip_list = list()
 empirical = list()
 for(m in 3:26) {
     atrend="1st"
     geo_precip = as.geodata(prec_mat, coords.col = 1:2, data.col = m)
+    geo_precip_list[[m-2]] = geo_precip
     if (m == 24) atrend="2nd"
     empirical[[m-2]] = variog(geo_precip, trend = atrend)
     plot(empirical[[m-2]])
@@ -222,6 +224,7 @@ for(m in 1:24) {
     plot(empirical[[m]], main=my_title)
     lines(fit)
 }
+fit = variofit(empirical[[1]], cov.model = "spherical", fix.nugget = FALSE, fix.kappa = TRUE)
 
 #Months 18, 21, all 4 equal
 #Month 22, matern and exponential equal
@@ -229,46 +232,46 @@ for(m in 1:24) {
 #spherical = 1, 2, 5, 7, 8, 9, 11, 12, 13, 15, 16, 17
 ```
 
-#Discretize raster to points
+#Load Libraries
 ```{r}
 library(atakrig)
 library(raster)
 library(terra)
 ```
 
-#new block
+#Calculate Residuals
 ```{r}
-prec_ras = raster(apply(matrix(prec_mat[,18], nrow=5, ncol=6, byrow=TRUE), 2, rev), xmn=-73.75, xmx=-61.25, ymn=1.25, ymx=11.25)
-plot(prec_ras)
-
-#prec.ras = raster(prec_mat[,c(1:2,3)])
-obs.discrete = discretizeRaster(prec_ras, cellsize=480, psf = "gau", sigma = 2)
-deconv_precip = deconvPointVgm(obs.discrete, model = "Sph", maxIter = 100, fig=TRUE, ngroup = 24, longlat = TRUE)
+resid_mat <- prec_mat[, 1:2]
+for(m in 1:24) {
+    mod <- lm(prec_mat[, 2+m] ~ prec_mat[, 1] + prec_mat[, 2])
+    resid_mat <- cbind(resid_mat, resid(mod))
+}
 ```
 
-#Point Variogram
+#Discretize raster to points
 ```{r}
+deconv_precip<-list()
 for(m in 1:24) {
-  prec.ras = raster(prec_mat[,c(1:2,m+2)])
-  obs.discrete = discretizeRaster(prec.ras, cellsize=480, psf = "gau", sigma=2)
+  prec_ras_resid = raster(apply(matrix(resid_mat[,m], nrow=5, ncol=6, byrow=TRUE), 2, rev), xmn=-73.75, xmx=-61.25, ymn=1.25, ymx=11.25)
+  obs.discrete = discretizeRaster(prec_ras_resid, cellsize=480, psf = "gau", sigma = 2)
     if(m %in% c(3, 4, 6, 10, 14, 19, 20, 23, 24)) {
-        deconv_precip = deconvPointVgm(obs.discrete, model = "Gau", maxIter = 100, fig=TRUE, ngroup = 24, longlat = TRUE)
-        my_title = paste0("Gaussian Deconvolution for Month ", m)
+      deconv_precip[[m]] = deconvPointVgm(obs.discrete, model = "Gau", maxIter = 100, fig=TRUE, ngroup = 24, longlat = FALSE)
     } else if(m %in% c(1, 2, 5, 7, 8, 9, 11, 12, 13, 15, 16, 17)) {
-        deconv_precip = deconvPointVgm(obs.discrete, model = "Sph", maxIter = 100, fig=TRUE, ngroup = 24, longlat = TRUE)
-        my_title = paste0("Spherical Deconvolution for Month ", m)
+        deconv_precip[[m]] = deconvPointVgm(obs.discrete, model = "Sph", maxIter = 100, fig=TRUE, ngroup = 24, longlat = FALSE)
     } else {
-        deconv_precip = deconvPointVgm(obs.discrete, model = "Exp", maxIter = 100, fig=TRUE, ngroup = 24, longlat = TRUE)
-        my_title = paste0("Exponential Deconvolution for Month ", m)
+        deconv_precip[[m]] = deconvPointVgm(obs.discrete, model = "Exp", maxIter = 100, fig=TRUE, ngroup = 24, longlat = FALSE)
     }
-  
 }
+```
 
-#plot(empirical[[m]], main=my_title)
-#lines(fit)
+#Make Kriging predictions
+```{r}
+new_lonlat = expand.grid(x = seq(-73.75,-61.25,length.out = 24), y = seq(1.25,11.25,length.out = 20))
 
-#deconvPointVgm(obs.discrete, model = "Sph", maxIter = 100, fig=TRUE, ngroup = 24, longlat = TRUE)
-
-#deconvPointVgm(x, model = "Exp", maxIter = 100,
-#    fixed.range = NA, longlat = FALSE, maxSampleNum = 100, fig = TRUE, ...)
+for(m in 3:26) {
+  krige.control(type.krige = "ok", trend.d = "1st", trend.l = "1st",
+            obj.model = NULL, cov.model = "spherical", cov.pars = deconv_precip[[m]]$pointVariogram[,2:3])
+  krige.conv(geo_precip_list[[m-2]], coords=geo_precip_list[[m-2]]$coords, data=geo_precip_list[[m-2]]$data,
+           locations = new_lonlat, krige = krige.control, output)
+}
 ```
