@@ -1,0 +1,280 @@
+---
+title: "CPC Merged Analysis of Precipitation (CMAP)"
+output:
+  pdf_document: default
+  html_document: default
+date: '2022-05-30'
+---
+
+```{r}
+library(ncdf4)
+
+# set path and filename
+#ncpath <- "/Home/github/Blackwell_Scholars_2022/"
+ncname <- "precip.mon.mean.nc"  
+#ncfname <- paste(ncpath, ncname, sep="")
+dname <- "precip"
+```
+
+
+# open a netCDF file
+```{r}
+ncin <- nc_open(ncname)
+print(ncin)
+```
+
+# get longitude and latitude
+```{r}
+lon <- ncvar_get(ncin,"lon")
+nlon <- dim(lon)
+head(lon)
+
+lat <- ncvar_get(ncin,"lat")
+nlat <- dim(lat)
+head(lat)
+
+print(c(nlon,nlat))
+```
+
+# get time
+```{r}
+time <- ncvar_get(ncin,"time")
+time
+
+tunits <- ncatt_get(ncin,"time","units")
+nt <- dim(time)
+nt
+
+tunits
+```
+
+# get precipitation
+```{r}
+precip_array <- ncvar_get(ncin,dname)
+dlname <- ncatt_get(ncin,dname,"long_name")
+dunits <- ncatt_get(ncin,dname,"units")
+fillvalue <- ncatt_get(ncin,dname,"_FillValue")
+dim(precip_array)
+```
+
+# get global attributes
+```{r}
+title <- ncatt_get(ncin,0,"title")
+institution <- ncatt_get(ncin,0,"institution")
+datasource <- ncatt_get(ncin,0,"source")
+references <- ncatt_get(ncin,0,"references")
+history <- ncatt_get(ncin,0,"history")
+Conventions <- ncatt_get(ncin,0,"Conventions")
+
+nc_close(ncin)
+```
+
+# load some packages
+```{r}
+library(chron)
+library(lattice)
+library(RColorBrewer)
+```
+
+# convert time -- split the time units string into fields
+```{r}
+tustr <- strsplit(tunits$value, " ")
+tdstr <- strsplit(unlist(tustr)[3], "-")
+tmonth <- as.integer(unlist(tdstr)[2])
+tday <- as.integer(unlist(tdstr)[3])
+tyear <- as.integer(unlist(tdstr)[1])
+chron(time,origin=c(tmonth, tday, tyear))
+```
+
+# replace netCDF fill values with NA's
+```{r}
+precip_array[precip_array==fillvalue$value] <- NA
+
+length(na.omit(as.vector(precip_array[,,1])))
+```
+
+# get 12 months slice of layer (Jan-Dec 1982 and Jan-Dec 1999)
+```{r}
+#m <- 1
+precip_slice <- precip_array[,,c(37:48, 241:252)]
+dim(precip_slice)
+```
+
+# quick map
+```{r}
+for(m in 1:24){
+image(lon,rev(lat),precip_slice[, ncol(precip_slice):1,m], col=rev(heat.colors(16)), breaks=0:16)}
+```
+
+# levelplot of the slice
+```{r}
+grid <- expand.grid(lon=lon, lat=lat)
+cutpts <- seq(0, 40, length.out=11)
+m<-1
+levelplot(precip_slice[,,m] ~ lon * lat, data=grid, at=cutpts, cuts=11, pretty=T, 
+  col.regions=(rev(heat.colors(16))))
+```
+            
+# create new lon and lat vectors
+```{r}
+lon_new <- c(lon[73:144]-360, lon[1:72])
+lat_new <- rev(lat)
+```
+
+# create new precipitation matrix
+```{r}
+precip_slice_new <- precip_slice[c(73:144, 1:72), ncol(precip_slice):1,]
+```
+
+# plot whole globe
+```{r}
+m<-1 #January
+image(lon_new, lat_new, precip_slice_new[,,m], col=rev(heat.colors(16)), breaks=0:16)
+#Compare with previous plot
+image(lon,rev(lat),precip_slice[, ncol(precip_slice):1,m], col=rev(heat.colors(16)), breaks=0:16)
+```
+
+# create boolean masks corresponding to region of interest
+```{r}
+lon_mask <- -75<=lon_new & lon_new <=(-60) # need parentheses here because <- is the assignment operator
+lat_mask <- 0<=lat_new & lat_new<=12
+```
+
+# plot region of interest
+```{r}
+m<-1
+for(m in 1:24){
+image(lon_new[lon_mask], lat_new[lat_mask], precip_slice_new[lon_mask, lat_mask,m], col=rev(heat.colors(16)), breaks=0:16)} # I took off the rev function here
+#
+m<-24
+grid <- expand.grid(lon=lon_new[lon_mask], lat=lat_new[lat_mask])
+grid$z<-as.vector(precip_slice_new[lon_mask, lat_mask,m])
+cutpts <- seq(0, 16, length.out=11) #watch out for the limits here
+levelplot(z ~ lon * lat, data=grid, at=cutpts, cuts=11, pretty=T, 
+  col.regions=(rev(heat.colors(16))))
+```
+
+# create dataframe -- reshape data
+```{r}
+# matrix (nlon*nlat rows by 2 cols) of lons and lats
+lonlat <- as.matrix(expand.grid(lon_new[lon_mask],lat_new[lat_mask]))
+dim(lonlat)
+```
+
+# vector of `precip` values
+```{r}
+prec_mat<-lonlat
+for (m in 1:24) {
+precip_vec <- as.vector(as.vector(precip_slice_new[lon_mask, lat_mask,m]))
+prec_mat<-cbind(prec_mat,precip_vec)
+}
+colnames(prec_mat) <- c("lon","lat","Jan_1982","Feb_1982","Mar_1982","Apr_1982","May_1982","Jun_1982",
+  "Jul_1982","Aug_1982","Sep_1982","Oct_1982","Nov_1982","Dec_1982","Jan_1999","Feb_1999","Mar_1999","Apr_1999","May_1999","Jun_1999",
+  "Jul_1999","Aug_1999","Sep_1999","Oct_1999","Nov_1999","Dec_1999")
+```
+
+```{r}
+mat_stat<-apply(prec_mat[,3:26],2,summary)
+mat_stat
+x = prec_mat[,1]
+y = prec_mat[,2]
+trend_one = lm(prec_mat[,3]~x+y)
+trend_two = lm(prec_mat[,3]~x+y+I(x^2)+I(y^2)+I(x*y))
+summary(trend_one)
+summary(trend_two)
+```
+
+# calculating statistics for full year
+```{r}
+summary(as.vector(prec_mat[, 3:14]))
+summary(as.vector(prec_mat[, 15:26]))
+sd(as.vector(prec_mat[, 3:14]))
+sd(as.vector(prec_mat[, 15:26]))
+```
+
+# calculate an empirical semi-variogram
+```{r}
+library(geoR)
+geo_precip_list = list()
+empirical = list()
+for(m in 3:26) {
+    atrend="1st"
+    geo_precip = as.geodata(prec_mat, coords.col = 1:2, data.col = m)
+    geo_precip_list[[m-2]] = geo_precip
+    if (m == 24) atrend="2nd"
+    empirical[[m-2]] = variog(geo_precip, trend = atrend)
+    plot(empirical[[m-2]])
+}
+
+```
+
+# fitting a model
+```{r}
+for(m in 1:24) {
+    if(m %in% c(3, 4, 6, 10, 14, 19, 20, 23, 24)) {
+        fit = variofit(empirical[[m]], cov.model = "gaussian", fix.nugget = FALSE, fix.kappa = TRUE)
+        my_title = paste0("Gaussian Variogram for Month ", m)
+    } else if(m %in% c(1, 2, 5, 7, 8, 9, 11, 12, 13, 15, 16, 17)) {
+        fit = variofit(empirical[[m]], cov.model = "spherical", fix.nugget = FALSE, fix.kappa = TRUE)
+        my_title = paste0("Spherical Variogram for Month ", m)
+    } else {
+        fit = variofit(empirical[[m]], cov.model = "exponential", fix.nugget = FALSE, fix.kappa = TRUE)
+        my_title = paste0("Exponential Variogram for Month ", m)
+    }
+    plot(empirical[[m]], main=my_title)
+    lines(fit)
+}
+fit = variofit(empirical[[1]], cov.model = "spherical", fix.nugget = FALSE, fix.kappa = TRUE)
+
+#Months 18, 21, all 4 equal
+#Month 22, matern and exponential equal
+#gaussian = 3, 4, 6, 10, 14, 19, 20, 23, 24
+#spherical = 1, 2, 5, 7, 8, 9, 11, 12, 13, 15, 16, 17
+```
+
+#Load Libraries
+```{r}
+library(atakrig)
+library(raster)
+library(terra)
+```
+
+#Calculate Residuals
+```{r}
+resid_mat <- prec_mat[, 1:2]
+for(m in 1:24) {
+    mod <- lm(prec_mat[, 2+m] ~ prec_mat[, 1] + prec_mat[, 2])
+    resid_mat <- cbind(resid_mat, resid(mod))
+}
+```
+
+#Discretize raster to points
+```{r}
+deconv_precip<-list()
+for(m in 1:24) {
+  prec_ras_resid = raster(apply(matrix(resid_mat[,m], nrow=5, ncol=6, byrow=TRUE), 2, rev), xmn=-73.75, xmx=-61.25, ymn=1.25, ymx=11.25)
+  obs.discrete = discretizeRaster(prec_ras_resid, cellsize=480, psf = "gau", sigma = 2)
+    if(m %in% c(3, 4, 6, 10, 14, 19, 20, 23, 24)) {
+      deconv_precip[[m]] = deconvPointVgm(obs.discrete, model = "Gau", maxIter = 100, fig=TRUE, ngroup = 24, longlat = FALSE)
+    } else if(m %in% c(1, 2, 5, 7, 8, 9, 11, 12, 13, 15, 16, 17)) {
+        deconv_precip[[m]] = deconvPointVgm(obs.discrete, model = "Sph", maxIter = 100, fig=TRUE, ngroup = 24, longlat = FALSE)
+    } else {
+        deconv_precip[[m]] = deconvPointVgm(obs.discrete, model = "Exp", maxIter = 100, fig=TRUE, ngroup = 24, longlat = FALSE)
+    }
+}
+```
+
+#Make Kriging predictions
+```{r}
+new_lonlat = expand.grid(x = seq(-73.75,-61.25,length.out = 24), y = seq(1.25,11.25,length.out = 20))
+
+for(m in 1:24) {
+  covpars<-deconv_precip[[m]]$pointVariogram
+  outpars<-output.control()
+  krigepars<-krige.control(type.krige = "ok", trend.d = "1st", trend.l = "1st",
+            obj.model = NULL, cov.model = "spherical", cov.pars = c(covpars$psill,covpars$range))
+  
+  image(krige.conv(geo_precip_list[[m]], coords=geo_precip_list[[m]]$coords, data=geo_precip_list[[m]]$data,
+           locations = new_lonlat, krige = krigepars, output=outpars))
+}
+```
